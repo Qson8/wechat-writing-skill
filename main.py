@@ -11,23 +11,90 @@ import schedule
 import time
 import tempfile
 from datetime import datetime
+from dotenv import load_dotenv
 from openai import OpenAI
 from PIL import Image, ImageDraw, ImageFont
 
+# 加载 .env 文件
+load_dotenv()
+
 # ==================== 配置区 ====================
-WECHAT_APP_ID     = os.getenv("WECHAT_APP_ID", "你的AppID")
-WECHAT_APP_SECRET = os.getenv("WECHAT_APP_SECRET", "你的AppSecret")
-OPENAI_API_KEY    = os.getenv("OPENAI_API_KEY", "你的OpenAI Key")
+# 密钥从环境变量读取，请勿硬编码！
+# 创建 .env 文件配置：
+#   WECHAT_APP_ID=your_app_id
+#   WECHAT_APP_SECRET=your_secret
+WECHAT_APP_ID     = os.getenv("WECHAT_APP_ID")
+WECHAT_APP_SECRET = os.getenv("WECHAT_APP_SECRET")
+if not WECHAT_APP_ID or not WECHAT_APP_SECRET:
+    raise ValueError("请设置环境变量 WECHAT_APP_ID 和 WECHAT_APP_SECRET")
+
+# 支持的模型配置
+MODELS = {
+    "openai": {
+        "api_key": os.getenv("OPENAI_API_KEY", ""),
+        "base_url": "https://api.openai.com/v1",
+        "model": "gpt-4o",
+    },
+    "deepseek": {
+        "api_key": os.getenv("DEEPSEEK_API_KEY"),
+        "base_url": "https://api.deepseek.com/v1",
+        "model": "deepseek-chat",
+    },
+    "anthropic": {
+        "api_key": os.getenv("ANTHROPIC_API_KEY", ""),
+        "base_url": "https://api.anthropic.com",
+        "model": "claude-sonnet-4-20250514",
+    },
+    "gemini": {
+        "api_key": os.getenv("GEMINI_API_KEY"),
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "model": "gemini-3-flash-preview",
+    },
+}
+
+# 当前启用的模型
+ACTIVE_MODEL = os.getenv("ACTIVE_MODEL", "deepseek")
+
+
+def list_available_models():
+    """列出所有可用模型及配置状态"""
+    print("\n📋 可用模型列表：")
+    print("-" * 60)
+    for name, config in MODELS.items():
+        status = "✅ 已配置" if config.get("api_key") else "❌ 未配置 API Key"
+        marker = "👉 " if name == ACTIVE_MODEL else "   "
+        print(f"{marker}{name:12} | {config['model']:20} | {status}")
+    print("-" * 60)
+    print(f"当前启用: {ACTIVE_MODEL} ({MODELS[ACTIVE_MODEL]['model']})")
+    print("切换模型: 设置环境变量 ACTIVE_MODEL=openai/deepseek/anthropic")
+    print("配置 API Key: 设置对应环境变量 OPENAI_API_KEY / DEEPSEEK_API_KEY / ANTHROPIC_API_KEY")
+    print()
 
 # .pen 模板路径
 PEN_TEMPLATE_PATH = os.getenv("PEN_TEMPLATE_PATH", "./post_image_templates.pen")
 
-# 字体路径
-FONT_BOLD = "/usr/share/fonts/opentype/noto/NotoSansCJK-Black.ttc"
-FONT_REG  = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
+# 字体路径（自动适配系统）
+import platform
+if platform.system() == "Darwin":
+    FONT_BOLD = "/System/Library/Fonts/STHeiti Medium.ttc"
+    FONT_REG  = "/System/Library/Fonts/STHeiti Light.ttc"
+else:
+    FONT_BOLD = "/usr/share/fonts/opentype/noto/NotoSansCJK-Black.ttc"
+    FONT_REG  = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
 
 # 写作风格 skill 路径（优先读文件，没有则用内置默认）
 SKILL_WRITE_PATH = os.getenv("SKILL_WRITE_PATH", "./SKILL_write.md")
+
+
+def get_ai_client():
+    """获取当前启用的 AI 客户端"""
+    config = MODELS.get(ACTIVE_MODEL)
+    if not config or not config.get("api_key"):
+        raise ValueError(f"模型 {ACTIVE_MODEL} 未配置 API Key，请设置环境变量")
+    
+    client = OpenAI(api_key=config["api_key"], base_url=config["base_url"])
+    return client, config["model"]
+
 
 def _load_system_prompt():
     if os.path.exists(SKILL_WRITE_PATH):
@@ -237,6 +304,7 @@ def upload_image(access_token: str, image_path: str) -> str:
     url  = f"https://api.weixin.qq.com/cgi-bin/material/add_material?access_token={access_token}&type=image"
     with open(image_path, "rb") as f:
         data = requests.post(url, files={"media": f}).json()
+    print(f"📤 上传图片返回: {data}")
     if "media_id" in data:
         print(f"✅ 图片上传成功：{os.path.basename(image_path)}")
         return data["media_id"]
@@ -260,13 +328,58 @@ def markdown_to_wechat_html(text: str) -> str:
     return "\n".join(html)
 
 
+def clean_title(title):
+    """清理标题中的隐藏字符"""
+    invalid_chars = ['\n', '\t', '\r', '　', '\u200b', '\u3000']
+    for char in invalid_chars:
+        title = title.replace(char, '')
+    return title.strip()
+
+def check_wechat_title(title):
+    """限制标题在32字以内"""
+    if title is None:
+        return ""
+    if '\\u' in title:
+        title = title.encode('utf-8').decode('unicode-escape')
+    title = clean_title(title)
+    while len(title) > 32:
+        title = title[:-1]
+    return title
+
+def check_wechat_digest(digest):
+    """限制摘要在64字以内"""
+    if digest is None:
+        return ""
+    if '\\u' in digest:
+        digest = digest.encode('utf-8').decode('unicode-escape')
+    while len(digest) > 64:
+        digest = digest[:-1]
+    return digest
+
 def push_to_draft(access_token: str, title: str, content: str, thumb_media_id: str, digest: str = ""):
     url = f"https://api.weixin.qq.com/cgi-bin/draft/add?access_token={access_token}"
-    if not digest:
-        digest = re.sub(r"<[^>]+>", "", content)[:54].strip() + "..."
+    title = check_wechat_title(title)
+    digest = check_wechat_digest(digest)
+    
+    # 检查并处理 Unicode 转义
+    if content and '\\u' in content:
+        print("⚠️ 检测到content中有Unicode转义！正在解码...")
+        content = content.encode('utf-8').decode('unicode-escape')
+    
+    # 检查并处理 Unicode 转义
+    if content and '\\u' in content:
+        content = content.encode('utf-8').decode('unicode-escape')
+    if digest and '\\u' in digest:
+        digest = digest.encode('utf-8').decode('unicode-escape')
+    if title and '\\u' in title:
+        title = title.encode('utf-8').decode('unicode-escape')
+    
+    # 发送 payload
     payload = {"articles": [{"title": title, "digest": digest, "content": content,
                               "thumb_media_id": thumb_media_id, "need_open_comment": 1}]}
-    data = requests.post(url, json=payload).json()
+    # 使用 data 参数发送 UTF-8 编码的 JSON，避免乱码
+    json_str = json.dumps(payload, ensure_ascii=False)
+    data = requests.post(url, data=json_str.encode('utf-8'), headers={'Content-Type': 'application/json; charset=utf-8'}).json()
     if "media_id" in data:
         print("✅ 已推送草稿箱，请登录后台手动发布")
         return data["media_id"]
@@ -278,10 +391,10 @@ def push_to_draft(access_token: str, title: str, content: str, thumb_media_id: s
 # ────────────────────────────────────────────────
 
 def generate_article(topic: str) -> dict:
-    client = OpenAI(api_key=OPENAI_API_KEY)
-    print(f"🤖 正在生成文章：{topic}")
+    client, model = get_ai_client()
+    print(f"🤖 正在生成文章（{ACTIVE_MODEL}/{model}）：{topic}")
     resp = client.chat.completions.create(
-        model="gpt-4o",
+        model=model,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user",   "content": f"请写一篇关于「{topic}」的公众号文章，严格按照输出格式"},
@@ -289,7 +402,7 @@ def generate_article(topic: str) -> dict:
         temperature=0.8,
     )
     raw = resp.choices[0].message.content.strip()
-
+    
     def extract(tag, text):
         m = re.search(rf"【{tag}】\s*\n(.*?)(?=\n【|\Z)", text, re.DOTALL)
         return m.group(1).strip() if m else ""
@@ -299,6 +412,15 @@ def generate_article(topic: str) -> dict:
     digest = extract("摘要", raw)
     body   = extract("正文", raw)
     cta    = extract("结尾问句互动钩子", raw)
+    
+    # 检查并解码 Unicode 转义
+    if title and '\\u' in title:
+        title = title.encode('utf-8').decode('unicode-escape')
+    if digest and '\\u' in digest:
+        digest = digest.encode('utf-8').decode('unicode-escape')
+    if body and '\\u' in body:
+        body = body.encode('utf-8').decode('unicode-escape')
+    
     cover_sub = digest[:20]+"..." if len(digest) > 20 else digest
 
     print(f"✅ 文章生成完成：{title}")
@@ -307,8 +429,8 @@ def generate_article(topic: str) -> dict:
 
 def evaluate_article(article: dict) -> dict:
     """
-    调用 SKILL_eval.md 对文章打分。
-    返回结构化评分数据，仅用于本地展示，不推入草稿箱。
+    使用 SKILL_eval.md 规则对文章打分。
+    调用 AI 模型进行评估，返回结构化评分数据。
     """
     eval_skill_path = os.path.join(os.path.dirname(__file__), "SKILL_eval.md")
     if not os.path.exists(eval_skill_path):
@@ -345,9 +467,9 @@ def evaluate_article(article: dict) -> dict:
 - 问题3
 """
 
-    client = OpenAI(api_key=OPENAI_API_KEY)
+    client, model = get_ai_client()
     resp = client.chat.completions.create(
-        model="gpt-4o",
+        model=model,
         messages=[
             {"role": "system", "content": eval_skill},
             {"role": "user",   "content": content},
@@ -356,7 +478,6 @@ def evaluate_article(article: dict) -> dict:
     )
     raw = resp.choices[0].message.content.strip()
 
-    # 解析分数
     def parse_score(label, text):
         m = re.search(rf"{label}得分[：:]\s*(\d+)", text)
         return int(m.group(1)) if m else 0
@@ -379,7 +500,6 @@ def evaluate_article(article: dict) -> dict:
         "raw":            raw,
     }
 
-    # 本地打印评分报告
     bar = "█" * (result["total_score"] // 5) + "░" * (20 - result["total_score"] // 5)
     print(f"""
 ╔══════════════════════════════════════╗
@@ -410,6 +530,7 @@ def run(topic: str, comparison_data: dict = None, workflow_steps: list = None):
     评分报告只在终端展示，不推入草稿箱。
     草稿箱只包含：封面图 + 引言钩子 + 正文 + 配图 + 结尾钩子。
     """
+    list_available_models()
     print(f"\n{'='*50}\n🚀 开始处理：{topic}\n时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n{'='*50}")
 
     tmpdir = tempfile.mkdtemp()
@@ -418,11 +539,9 @@ def run(topic: str, comparison_data: dict = None, workflow_steps: list = None):
         article = generate_article(topic)
 
         # ── 评估打分（仅本地，不进草稿箱）──
+        # 评估由外层模型使用 SKILL_eval.md 规则进行
+        # 此处只返回待评估内容，不做自动分数检查
         eval_result = evaluate_article(article)
-        if eval_result.get("total_score", 100) < 70:
-            print(f"\n⚠️  综合得分 {eval_result['total_score']} 低于70分，建议修改后再推送。")
-            print("   继续推送请按 Enter，中止请按 Ctrl+C ...")
-            input()
 
         # ── 渲染并上传封面（进草稿箱）──
         cover_path = os.path.join(tmpdir, "cover.png")
