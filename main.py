@@ -305,23 +305,110 @@ def generate_article(topic: str) -> dict:
     return dict(title=title, hook=hook, digest=digest, body=body, cta=cta, cover_subtitle=cover_sub)
 
 
+def evaluate_article(article: dict) -> dict:
+    """
+    调用 SKILL_eval.md 对文章打分。
+    返回结构化评分数据，仅用于本地展示，不推入草稿箱。
+    """
+    eval_skill_path = os.path.join(os.path.dirname(__file__), "SKILL_eval.md")
+    if not os.path.exists(eval_skill_path):
+        print("⚠️  找不到 SKILL_eval.md，跳过评估")
+        return {}
+
+    with open(eval_skill_path, encoding="utf-8") as f:
+        eval_skill = f.read()
+
+    content = f"""请评估以下公众号文章，严格按照评分框架输出结构化结果。
+
+标题：{article['title']}
+
+开头引言钩子：{article['hook']}
+
+摘要：{article['digest']}
+
+正文：
+{article['body']}
+
+结尾互动钩子：{article['cta']}
+
+请按以下格式输出（只输出这个格式，不要多余说明）：
+标题得分: XX/20
+开头得分: XX/20
+正文得分: XX/30
+语言得分: XX/20
+结尾得分: XX/10
+综合得分: XX/100
+结论: [可以直接发/小改再发/需要大改/建议重写]
+主要问题:
+- 问题1
+- 问题2
+- 问题3
+"""
+
+    client = OpenAI(api_key=OPENAI_API_KEY)
+    resp = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": eval_skill},
+            {"role": "user",   "content": content},
+        ],
+        temperature=0.3,
+    )
+    raw = resp.choices[0].message.content.strip()
+
+    # 解析分数
+    def parse_score(label, text):
+        m = re.search(rf"{label}得分[：:]\s*(\d+)", text)
+        return int(m.group(1)) if m else 0
+
+    def parse_field(label, text):
+        m = re.search(rf"{label}[：:]\s*(.+)", text)
+        return m.group(1).strip() if m else ""
+
+    issues = re.findall(r"^-\s+(.+)$", raw, re.MULTILINE)
+
+    result = {
+        "title_score":    parse_score("标题", raw),
+        "hook_score":     parse_score("开头", raw),
+        "body_score":     parse_score("正文", raw),
+        "lang_score":     parse_score("语言", raw),
+        "closing_score":  parse_score("结尾", raw),
+        "total_score":    parse_score("综合", raw),
+        "conclusion":     parse_field("结论", raw),
+        "issues":         issues,
+        "raw":            raw,
+    }
+
+    # 本地打印评分报告
+    bar = "█" * (result["total_score"] // 5) + "░" * (20 - result["total_score"] // 5)
+    print(f"""
+╔══════════════════════════════════════╗
+║          📊 文章质量评估报告          ║
+╠══════════════════════════════════════╣
+║  标题    {result['title_score']:>3}/20   开头    {result['hook_score']:>3}/20  ║
+║  正文    {result['body_score']:>3}/30   语言    {result['lang_score']:>3}/20  ║
+║  结尾    {result['closing_score']:>3}/10                      ║
+╠══════════════════════════════════════╣
+║  综合得分：{result['total_score']:>3}/100  {bar}  ║
+║  结论：{result['conclusion']:<30}  ║
+╠══════════════════════════════════════╣""")
+    for issue in result["issues"]:
+        print(f"║  ⚠ {issue:<35}║")
+    print("╚══════════════════════════════════════╝")
+
+    return result
+
+
 # ────────────────────────────────────────────────
 # 主流程
 # ────────────────────────────────────────────────
 
 def run(topic: str, comparison_data: dict = None, workflow_steps: list = None):
     """
-    主流程：生成文章 → 渲染配图 → 上传 → 推草稿箱
+    主流程：生成文章 → 评估打分（本地） → 渲染配图 → 上传 → 推草稿箱
 
-    comparison_data（可选）:
-    {
-        "title": "三大框架对比",
-        "headers": ["对比项", "A", "B", "C"],
-        "rows": [["内存", "394MB", "5MB", "30MB"], ...]
-    }
-
-    workflow_steps（可选）:
-    [("🎯", "目标设定", "告诉Hand\n要做什么"), ...]
+    评分报告只在终端展示，不推入草稿箱。
+    草稿箱只包含：封面图 + 引言钩子 + 正文 + 配图 + 结尾钩子。
     """
     print(f"\n{'='*50}\n🚀 开始处理：{topic}\n时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n{'='*50}")
 
@@ -330,16 +417,22 @@ def run(topic: str, comparison_data: dict = None, workflow_steps: list = None):
         token   = get_access_token()
         article = generate_article(topic)
 
-        # 渲染并上传封面
+        # ── 评估打分（仅本地，不进草稿箱）──
+        eval_result = evaluate_article(article)
+        if eval_result.get("total_score", 100) < 70:
+            print(f"\n⚠️  综合得分 {eval_result['total_score']} 低于70分，建议修改后再推送。")
+            print("   继续推送请按 Enter，中止请按 Ctrl+C ...")
+            input()
+
+        # ── 渲染并上传封面（进草稿箱）──
         cover_path = os.path.join(tmpdir, "cover.png")
         render_cover(article["title"], article["cover_subtitle"], cover_path, PEN_TEMPLATE_PATH)
         thumb_id = upload_image(token, cover_path)
 
-        # 组装正文 HTML
-        body_html = f'<p style="color:#6366f1;font-weight:bold;font-size:15px;text-align:center;">{article["hook"]}</p>\n'
+        # ── 组装草稿箱正文 HTML（不含评分）──
+        body_html  = f'<p style="color:#6366f1;font-weight:bold;font-size:15px;text-align:center;">{article["hook"]}</p>\n'
         body_html += markdown_to_wechat_html(article["body"])
 
-        # 渲染对比图（可选）
         if comparison_data:
             comp_path = os.path.join(tmpdir, "comparison.png")
             render_comparison(comparison_data["headers"], comparison_data["rows"],
@@ -347,17 +440,15 @@ def run(topic: str, comparison_data: dict = None, workflow_steps: list = None):
             comp_id    = upload_image(token, comp_path)
             body_html += f'\n<img src="" data-mediaId="{comp_id}" style="width:100%;" />'
 
-        # 渲染流程图（可选）
         if workflow_steps:
             flow_path = os.path.join(tmpdir, "workflow.png")
             render_workflow(workflow_steps, "工作流程", "全程自动运行，无需人工介入", flow_path)
             flow_id    = upload_image(token, flow_path)
             body_html += f'\n<img src="" data-mediaId="{flow_id}" style="width:100%;" />'
 
-        # 结尾钩子
         body_html += f'\n<p style="color:#94a3b8;font-size:15px;margin-top:32px;">{article["cta"]}</p>'
 
-        # 推草稿箱
+        # ── 推草稿箱 ──
         push_to_draft(token, article["title"], body_html, thumb_id, digest=article["digest"])
         print(f"\n🎉 完成！「{article['title']}」已进入草稿箱，等待手动发布。")
 

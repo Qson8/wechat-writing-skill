@@ -1,6 +1,7 @@
 ---
-name: 公众号文章评估
-description: 评估一篇公众号文章的质量，给出诊断报告和修改建议。适用于文章写完后自检，或评估别人的文章。评估标准基于作者本人风格：客观真实、大白话、舒适易读、有共情感。
+name: wechat-eval
+description: "Use this skill to evaluate or score a WeChat public account article (公众号文章). Triggers include: requests to evaluate, score, review, diagnose, or give feedback on an article. Also triggers when the user asks why an article has low readership, wants to compare two articles, or asks if an article is ready to publish. Outputs a structured diagnostic report with scores across 5 dimensions (title, opening, body, language, closing) and a total score out of 100. Do NOT use for writing new articles — use wechat-writing skill instead."
+license: MIT
 ---
 
 # 公众号文章评估框架
