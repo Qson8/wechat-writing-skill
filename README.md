@@ -133,7 +133,9 @@ wechat-writing-skill/
 ├── .cursor/
 │   └── rules/
 │       └── wechat-writing.mdc   ← Cursor 规则文件
-├── evals.json                    ← 测试用例（5个场景覆盖4种服务）
+├── evals/
+│   ├── evals.json                ← 测试用例（5个场景覆盖4种服务）
+│   └── run_evals.py              ← 执行脚本，调用 Claude API 跑用例
 ├── scripts/
 │   ├── render_images.py          ← 封面图 / 对比表 / 流程图渲染
 │   └── post_image_templates.pen ← 封面排版模板
