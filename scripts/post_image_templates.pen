@@ -1,0 +1,33 @@
+{
+  "nodes": [
+    {
+      "id": "cover",
+      "type": "frame",
+      "name": "封面图",
+      "width": 1200,
+      "height": 675,
+      "layout": "vertical",
+      "padding": 60,
+      "fill": "#0f172a"
+    },
+    {
+      "id": "title",
+      "type": "text",
+      "parentId": "cover",
+      "content": "为什么AI反而让你更容易找工作？",
+      "fontSize": 52,
+      "fontWeight": "bold",
+      "fill": "#ffffff",
+      "align": "center"
+    },
+    {
+      "id": "subtitle",
+      "type": "text",
+      "parentId": "cover",
+      "content": "这3个趋势必须知道",
+      "fontSize": 28,
+      "fill": "#94a3b8",
+      "align": "center"
+    }
+  ]
+}

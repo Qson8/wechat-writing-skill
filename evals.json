@@ -1,0 +1,64 @@
+{
+  "skill_name": "wechat-writing",
+  "version": "1.0.0",
+  "evals": [
+    {
+      "id": 1,
+      "service": "write",
+      "prompt": "帮我写一篇关于「用AI工具把副业效率提升3倍」的公众号文章，读者是想做副业的普通上班族",
+      "expected_output": {
+        "sections": ["【标题】", "【开头引言钩子】", "【摘要】", "【正文】", "【结尾问句互动钩子】", "【配图需求】"],
+        "title_max_chars": 25,
+        "hook_chars_range": [18, 22],
+        "digest_chars_range": [110, 120],
+        "banned_words_absent": ["颠覆认知", "逆天", "炸裂", "震惊！", "相信自己", "今天给大家分享"],
+        "body_has_subheadings": true,
+        "body_word_count_range": [800, 1500]
+      }
+    },
+    {
+      "id": 2,
+      "service": "topic_ideas",
+      "prompt": "我的公众号是做独立开发和AI内容的，最近不知道写什么，给我几个选题方向",
+      "expected_output": {
+        "topic_count_range": [3, 5],
+        "each_topic_has": ["标题", "核心角度", "适合原因"],
+        "topics_fit_pillars": ["AI工具", "独立开发", "副业收入", "程序员视角"]
+      }
+    },
+    {
+      "id": 3,
+      "service": "evaluate",
+      "prompt": "帮我评估这篇文章：\n\n标题：震惊！这个AI工具让我效率提升了100倍！\n\n今天给大家分享一个超级牛的工具，相信自己，努力就会成功，这个工具可以帮你颠覆认知，实现人生逆袭...",
+      "expected_output": {
+        "has_score_for_each": ["标题", "开头", "正文内容", "语言风格", "结尾"],
+        "total_score_below": 50,
+        "identifies_banned_words": true,
+        "gives_specific_suggestions": true,
+        "conclusion": "建议重写"
+      }
+    },
+    {
+      "id": 4,
+      "service": "rewrite",
+      "prompt": "帮我改写这个标题，让它更符合我的风格：「震惊！AI写作神器横空出世，普通人弯道超车的机会来了！」",
+      "expected_output": {
+        "no_banned_words": true,
+        "has_specific_number_or_scene": true,
+        "length_max_chars": 25,
+        "provides_multiple_options": true
+      }
+    },
+    {
+      "id": 5,
+      "service": "write",
+      "prompt": "帮我写一篇介绍 OpenFang 这个 Agent 框架的公众号文章。它刚开源暴涨2700 Star，用Rust构建，内置7个自主运行的Hands能力包，对比OpenClaw内存从394MB降到30MB",
+      "expected_output": {
+        "sections": ["【标题】", "【开头引言钩子】", "【摘要】", "【正文】", "【结尾问句互动钩子】", "【配图需求】"],
+        "body_mentions_key_facts": ["2700", "Rust", "7", "394MB"],
+        "body_has_comparison": true,
+        "image_descriptions_include": ["封面图", "对比"]
+      }
+    }
+  ]
+}
