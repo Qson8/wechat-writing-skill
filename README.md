@@ -29,7 +29,7 @@
 
 ```bash
 # 克隆仓库到你的项目根目录
-git clone https://github.com/your-username/wechat-writing-skill.git
+git clone https://github.com/Qson8/wechat-writing-skill.git
 
 # 把 CLAUDE.md 复制到项目根目录
 cp wechat-writing-skill/CLAUDE.md ./CLAUDE.md
@@ -41,7 +41,7 @@ cp wechat-writing-skill/CLAUDE.md ./CLAUDE.md
 ### 在 Cursor 中使用
 
 ```bash
-git clone https://github.com/your-username/wechat-writing-skill.git
+git clone https://github.com/Qson8/wechat-writing-skill.git
 
 # 复制 rules 文件到你的项目
 cp -r wechat-writing-skill/.cursor ./
