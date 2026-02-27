@@ -12,7 +12,7 @@ license: MIT
 
 ## Overview
 
-This skill provides four services:
+This skill provides five services:
 
 | Service | When to use |
 |---------|-------------|
@@ -20,6 +20,7 @@ This skill provides four services:
 | **Evaluate** | User provides an article and asks for feedback |
 | **Topic Ideas** | User says "不知道写什么" or "给我几个选题" |
 | **Rewrite** | User provides existing content and asks to improve it |
+| **Remove AI Flavor** | User says "去AI味" or "帮我改得更自然" |
 
 ---
 
@@ -55,6 +56,23 @@ This skill provides four services:
 今天给大家分享 / 本文将为大家介绍
 震惊！/ 重磅！
 ```
+
+### AI-flavored patterns to remove (去AI味)
+
+AI生成的文章有以下特征，写作时必须避免：
+
+| AI味特征 | 问题 | 怎么改 |
+|---------|------|-------|
+| 过度使用"首先/其次/最后" | 每段都这么写，显得机械 | 用"不过""但是""说到""就拿""其实"等更自然的过渡 |
+| 过度礼貌客套 | "感谢您的阅读""希望对您有帮助" | 直接说"看完有收获的点个赞" |
+| 句子过于完美对称 | "要学会倾听，也要学会表达" | "不仅要听，还得会说——这是我踩过的坑" |
+| 堆砌程度词 | "非常""极其""十分""相当" | 直接删掉，或用具体场景代替 |
+| 机械罗列 | "第一点、第二点、第三点" | 用"一个问题""一个例子""一个教训" |
+| 正确的废话 | "要善于运用工具提高效率" | 给出具体工具、具体数字、具体场景 |
+| 缺乏具体细节 | "我研究了很多AI工具" | "我试了ChatGPT、Claude、Midjourney这三个" |
+| 过于书面化 | "因此/鉴于此/综上所述" | "所以""这么一搞""说白了" |
+
+**去AI味的核心：把自己踩过的坑、解决的问题、具体的数字和例子写出来。**
 
 ### OK to use (sparingly, ≤2x per article)
 ```
@@ -94,7 +112,16 @@ This skill provides four services:
 
 ## Required Output Format
 
-Every article must include all 6 sections in order:
+Before writing the article, output the article metrics first:
+
+```
+【领域】AI工具 / 独立开发 / 副业路径 / 程序员视角
+【字数】800-1500字
+【评分预估】标题20分 + 开头18分 + 正文28分 + 语言18分 + 结尾8分 = 92分
+【AI味预估】12分（真人级）
+```
+
+Then output the 6 sections in order:
 
 ```
 【标题】
@@ -145,17 +172,61 @@ When asked to evaluate an article, score each dimension and give specific improv
 
 | Dimension | Max score | Key criteria |
 |-----------|-----------|--------------|
-| Title | 20 | Has number or scene, clear reader benefit, no banned words |
-| Opening | 20 | Scene-based entry, reader can see themselves, no self-hype |
-| Body content | 30 | Concrete data/cases, actionable steps, no fluff |
-| Language style | 20 | Plain language, conversational, no banned phrases |
+| Title | 15 | Has number or scene, clear reader benefit, no banned words |
+| Opening | 15 | Scene-based entry, reader can see themselves, no self-hype |
+| Body content | 25 | Concrete data/cases, actionable steps, no fluff |
+| Language style | 15 | Plain language, conversational, no banned phrases |
+| **AI flavor (去AI味)** | **30** | **0-100 scale, higher = more AI-like** |
+
+### AI Flavor Scoring (0-100分，分值越高AI味越重)
+
+与市面主流AI检测工具（Turnitin、Originality.ai）评分标准一致：
+
+| Score | 等级 | 说明 |
+|-------|------|------|
+| **0-20** | 真人级 | 细节丰富，像真人写的故事，有踩坑经历 |
+| **21-40** | 轻微AI味 | 有一些具体例子，但过渡稍显机械 |
+| **41-60** | 中等AI味 | 偶尔出现机械过渡，有客套话，句子较对称 |
+| **61-80** | 较高AI味 | 大量机械过渡，堆砌程度词，缺乏具体细节 |
+| **81-100** | 严重AI味 | 流水线产品，通篇正确的废话，像AI写的 |
+
+**AI味扣分项（每项扣8-15分）：**
+- 全文"首先/其次/最后"出现超过3次
+- 有"感谢您的阅读""希望对您有帮助"等客套话
+- 句子过度对称（如"要学会A，也要学会B"）超过2处
+- 程度词堆砌（非常/极其/十分/相当）超过3处
+- 机械罗列"第一点/第二点/第三点"超过2处
+- 缺乏具体数字、具体工具名、具体案例
+- 过于书面化（因此/鉴于此/综上所述）超过2处
+- 没有个人经历或踩坑故事
+
+**AI味加分项（每项加8-15分）：**
+- 有具体踩坑经历和解决方案
+- 有具体数字（如"省了10小时""赚了3000块"）
+- 有具体工具名/产品名
+- 有口语化表达（"捣鼓""踩坑""说白了"）
+- 句子长短不一，有节奏感
+- 有和读者相关的吐槽或共鸣
 | Closing | 10 | Clean summary + interaction hook |
 
+**AI味>60分 → 直接重新生成**
+
+当评估时AI味得分>60分，不需要修改建议，直接按照去AI味规则重新生成文章。
+
+---
+
 **Total score interpretation:**
-- 85–100: Ready to publish
-- 70–84: Minor edits needed
-- 50–69: Significant revision required
-- Below 50: Consider rewriting
+- 90–100: Ready to publish（AI味≤20分）
+- 75–89: Minor edits needed（AI味≤40分）
+- 60–74: Significant revision required
+- Below 60: Consider rewriting
+
+**AI味专项指标（0-100分）：**
+- ≤20分：真人级，可发布
+- 21-40分：轻微AI味，简单修改
+- 41-60分：中等AI味，需要较大修改
+- 61-80分：较高AI味，建议重写
+- 81-100分：严重AI味，必须重写
 
 ---
 
